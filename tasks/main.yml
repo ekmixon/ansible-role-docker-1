@@ -1,0 +1,134 @@
+---
+- name: Overlay docker community edition yum repository
+  tags: docker
+  become: true
+  template:
+    dest: /etc/yum.repos.d/docker-ce.repo
+    group: root
+    mode: 0644
+    owner: root
+    src: docker-ce.repo.j2
+
+- name: Overlay preloaded kernel modules
+  tags: docker
+  become: true
+  template:
+    dest: /etc/modules-load.d/docker.conf
+    group: root
+    mode: 0600
+    owner: root
+    src: docker-kmod.j2
+
+- name: Ensure defined kernel modules are loaded
+  tags: docker
+  become: true
+  modprobe:
+    name: "{{ docker_kmod }}"
+    state: present
+  loop: "{{ docker_kmods }}"
+  loop_control:
+    label: "{{ docker_kmod }}"
+    loop_var: docker_kmod
+  when: docker_kmods | length > 0
+
+- name: Ensure the docker packages are installed
+  tags: docker
+  become: true
+  yum:
+    enablerepo: docker-ce-stable
+    name: "{{ docker_packages }}"
+    state: present
+  when: docker_packages | length > 0
+
+- name: Generate temporary directory for python packages
+  tags: docker
+  become: true
+  tempfile:
+    prefix: 'docker.'
+    state: directory
+  register: _docker_tempfile
+  when: ansible_distribution_major_version < '8'
+
+- name: Ensure the docker python packages are isntalled
+  tags: docker
+  become: true
+  pip:
+    name: docker
+    state: present
+    virtualenv: "{{ _docker_tempfile.path }}"
+  when: ansible_distribution_major_version < '8'
+
+- name: Append users to docker system group
+  tags: docker
+  become: true
+  user:
+    append: true
+    name: "{{ docker_user }}"
+    groups: docker
+  loop: "{{ docker_users }}"
+  loop_control:
+    label: "{{ docker_user }}"
+    loop_var: docker_user
+  when: docker_users | length > 0
+
+- name: Ensure docker is started and enabled on boot
+  tags: docker
+  become: true
+  systemd:
+    enabled: true
+    name: "{{ docker_service }}"
+    state: started
+  loop: "{{ docker_systemd }}"
+  loop_control:
+    label: "{{ docker_service }}"
+    loop_var: docker_service
+  when: docker_systemd | length > 0
+
+- name: Ensure user defined docker networks are present
+  tags: docker
+  become: true
+  docker_network:
+    api_version: "{{ docker_network.api_version | default('auto') }}"
+    appends: "{{ docker_network.appends | default(false) }}"
+    attachable: "{{ docker_network.attachable | default(omit) }}"
+    ca_cert: "{{ docker_network.ca_cert | default(omit) }}"
+    client_cert: "{{ docker_network.client_cert | default(omit) }}"
+    connected: "{{ docker_network.connected | default(omit) }}"
+    debug: "{{ docker_network.debug | default(false) }}"
+    docker_host: "{{ docker_network.docker_host | default(omit) }}"
+    driver: "{{ docker_network.driver | default('bridge') }}"
+    driver_options: "{{ docker_network.driver_options | default(omit) }}"
+    enable_ipv6: "{{ docker_network.enable_ipv6 | default(omit) }}"
+    force: "{{ docker_network.force | default(false) }}"
+    internal: "{{ docker_network.internal | default(omit) }}"
+    ipam_config: "{{ docker_network.ipam_config | default(omit) }}"
+    ipam_driver: "{{ docker_network.ipam_driver | default(omit) }}"
+    ipam_driver_options: "{{ docker_network.ipam_driver_options | default(omit) }}"
+    ipam_options: "{{ docker_network.ipam_options | default(omit) }}"
+    labels: "{{ docker_network.labels | default(omit) }}"
+    name: "{{ docker_network.name }}"
+    scope: "{{ docker_network.scope | default(omit) }}"
+    ssl_version: "{{ docker_network.ssl_version | default(omit) }}"
+    state: "{{ docker_network.state | default('present') }}"
+    timeout: "{{ docker_network.timeout | default(60) }}"
+    tls: "{{ docker_network.tls | default(false) }}"
+    tls_hostname: "{{ docker_network.tls_hostname | default('localhost') }}"
+    validate_certs: "{{ docker_network.validate_certs | default(false) }}"
+  loop: "{{ docker_networks }}"
+  loop_control:
+    label: "{{ docker_network.name }}"
+    loop_var: docker_network
+  vars:
+    ansible_python_interpreter: "{{ _docker_tempfile.path + '/bin/python' if
+                                    ansible_distribution_major_version < '8' else
+                                    omit }}"
+  when: docker_networks | length > 0
+
+- name: Ensure temporary directory is absent
+  tags: docker
+  become: true
+  file:
+    path: "{{ _docker_tempfile.path }}"
+    state: absent
+  when: ansible_distribution_major_version < '8'
+...
