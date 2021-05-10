@@ -19,7 +19,7 @@
     owner: root
     src: docker-kmod.j2
 
-- name: Ensure defined kernel modules are loaded
+- name: Ensure docker kernel modules are loaded
   tags: docker
   become: true
   modprobe:
@@ -40,25 +40,7 @@
     state: present
   when: docker_packages | length > 0
 
-- name: Generate temporary directory for python packages
-  tags: docker
-  become: true
-  tempfile:
-    prefix: 'docker.'
-    state: directory
-  register: _docker_tempfile
-  when: ansible_distribution_major_version < '8'
-
-- name: Ensure the docker python packages are installed
-  tags: docker
-  become: true
-  pip:
-    name: docker
-    state: present
-    virtualenv: "{{ _docker_tempfile.path }}"
-  when: ansible_distribution_major_version < '8'
-
-- name: Append users to docker system group
+- name: Ensure users are appended to docker group
   tags: docker
   become: true
   user:
@@ -70,6 +52,34 @@
     label: "{{ docker_user }}"
     loop_var: docker_user
   when: docker_users | length > 0
+
+- name: Ensure docker-compose directory is present
+  tags: docker
+  become: true
+  file:
+    group: docker
+    mode: 0750
+    owner: root
+    path: "{{ docker_compose_dir }}"
+    state: directory
+
+- name: Overlay docker-compose systemd unit
+  tags: docker
+  become: true
+  template:
+    dest: /usr/lib/systemd/system/docker-compose@.service
+    group: root
+    mode: 0644
+    owner: root
+    src: docker-compose.service.j2
+  register: _docker_compose_systemd
+
+- name: Ensure systemd is reloaded
+  tags: docker
+  become: true
+  systemd:
+    daemon_reload: true
+  when: _docker_compose_systemd is changed
 
 - name: Ensure docker is started and enabled on boot
   tags: docker
@@ -84,51 +94,173 @@
     loop_var: docker_service
   when: docker_systemd | length > 0
 
-- name: Ensure user defined docker networks are present
+- name: Ensure docker networks and containers are present
   tags: docker
   become: true
-  docker_network:
-    api_version: "{{ docker_network.api_version | default('auto') }}"
-    appends: "{{ docker_network.appends | default(false) }}"
-    attachable: "{{ docker_network.attachable | default(omit) }}"
-    ca_cert: "{{ docker_network.ca_cert | default(omit) }}"
-    client_cert: "{{ docker_network.client_cert | default(omit) }}"
-    connected: "{{ docker_network.connected | default(omit) }}"
-    debug: "{{ docker_network.debug | default(false) }}"
-    docker_host: "{{ docker_network.docker_host | default(omit) }}"
-    driver: "{{ docker_network.driver | default('bridge') }}"
-    driver_options: "{{ docker_network.driver_options | default(omit) }}"
-    enable_ipv6: "{{ docker_network.enable_ipv6 | default(omit) }}"
-    force: "{{ docker_network.force | default(false) }}"
-    internal: "{{ docker_network.internal | default(omit) }}"
-    ipam_config: "{{ docker_network.ipam_config | default(omit) }}"
-    ipam_driver: "{{ docker_network.ipam_driver | default(omit) }}"
-    ipam_driver_options: "{{ docker_network.ipam_driver_options | default(omit) }}"
-    ipam_options: "{{ docker_network.ipam_options | default(omit) }}"
-    labels: "{{ docker_network.labels | default(omit) }}"
-    name: "{{ docker_network.name }}"
-    scope: "{{ docker_network.scope | default(omit) }}"
-    ssl_version: "{{ docker_network.ssl_version | default(omit) }}"
-    state: "{{ docker_network.state | default('present') }}"
-    timeout: "{{ docker_network.timeout | default(60) }}"
-    tls: "{{ docker_network.tls | default(false) }}"
-    tls_hostname: "{{ docker_network.tls_hostname | default('localhost') }}"
-    validate_certs: "{{ docker_network.validate_certs | default(false) }}"
-  loop: "{{ docker_networks }}"
-  loop_control:
-    label: "{{ docker_network.name }}"
-    loop_var: docker_network
-  vars:
-    ansible_python_interpreter: "{{ _docker_tempfile.path + '/bin/python' if
-                                    ansible_distribution_major_version < '8' else
-                                    omit }}"
-  when: docker_networks | length > 0
+  block:
+    - name: Generate temporary directory for python packages
+      tempfile:
+        prefix: 'docker.'
+        state: directory
+      register: _docker_tempfile
 
-- name: Ensure temporary directory is absent
-  tags: docker
-  become: true
-  file:
-    path: "{{ _docker_tempfile.path }}"
-    state: absent
-  when: ansible_distribution_major_version < '8'
+    - name: Ensure docker python packages are installed
+      pip:
+        name: docker
+        state: present
+        virtualenv: "{{ _docker_tempfile.path }}"
+
+    - name: Ensure docker networks are present
+      docker_network:
+        api_version: "{{ docker_network.api_version | default('auto') }}"
+        appends: "{{ docker_network.appends | default(false) }}"
+        attachable: "{{ docker_network.attachable | default(omit) }}"
+        ca_cert: "{{ docker_network.ca_cert | default(omit) }}"
+        client_cert: "{{ docker_network.client_cert | default(omit) }}"
+        connected: "{{ docker_network.connected | default(omit) }}"
+        debug: "{{ docker_network.debug | default(false) }}"
+        docker_host: "{{ docker_network.docker_host | default(omit) }}"
+        driver: "{{ docker_network.driver | default('bridge') }}"
+        driver_options: "{{ docker_network.driver_options | default(omit) }}"
+        enable_ipv6: "{{ docker_network.enable_ipv6 | default(omit) }}"
+        force: "{{ docker_network.force | default(false) }}"
+        internal: "{{ docker_network.internal | default(omit) }}"
+        ipam_config: "{{ docker_network.ipam_config | default(omit) }}"
+        ipam_driver: "{{ docker_network.ipam_driver | default(omit) }}"
+        ipam_driver_options: "{{ docker_network.ipam_driver_options | default(omit) }}"
+        ipam_options: "{{ docker_network.ipam_options | default(omit) }}"
+        labels: "{{ docker_network.labels | default(omit) }}"
+        name: "{{ docker_network.name }}"
+        scope: "{{ docker_network.scope | default(omit) }}"
+        ssl_version: "{{ docker_network.ssl_version | default(omit) }}"
+        state: "{{ docker_network.state | default('present') }}"
+        timeout: "{{ docker_network.timeout | default(60) }}"
+        tls: "{{ docker_network.tls | default(false) }}"
+        tls_hostname: "{{ docker_network.tls_hostname | default('localhost') }}"
+        validate_certs: "{{ docker_network.validate_certs | default(false) }}"
+      loop: "{{ docker_networks }}"
+      loop_control:
+        label: "{{ docker_network.name }}"
+        loop_var: docker_network
+      vars:
+        ansible_python_interpreter: "{{ _docker_tempfile.path + '/bin/python' }}"
+      when:
+        - docker_network.name is defined
+        - docker_networks | length > 0
+
+    - name: Ensure docker containers are present
+      docker_container:
+        api_version: "{{ docker_container.api_version | default('auto') }}"
+        auto_remove: "{{ docker_container.auto_remove | default(false) }}"
+        blkio_weight: "{{ docker_container.blkio_weight | default(omit) }}"
+        ca_cert: "{{ docker_container.ca_cert_path | default(omit) }}"
+        cap_drop: "{{ docker_container.cap_drop | default(omit) }}"
+        capabilities: "{{ docker_container.capabilities | default(omit) }}"
+        cleanup: "{{ docker_container.cleanup | default(false) }}"
+        client_cert: "{{ docker_container.client_cert | default(omit) }}"
+        client_key: "{{ docker_container.client_key | default(omit) }}"
+        command: "{{ docker_container.command | default(omit) }}"
+        comparisons: "{{ docker_container.comparisons | default(omit) }}"
+        cpu_period: "{{ docker_container.cpu_period | default(omit) }}"
+        cpu_quota: "{{ docker_container.cpu_quota | default(omit) }}"
+        cpu_shares: "{{ docker_container.cpu_shares | default(omit) }}"
+        cpuset_cpus: "{{ docker_container.cpuset_cpus | default(omit) }}"
+        cpuset_mems: "{{ docker_container.cpuset_mems | default(omit) }}"
+        debug: "{{ docker_container.debug | default(false) }}"
+        detach: "{{ docker_container.detach | default(true) }}"
+        device_read_bps: "{{ docker_container.device_read_bps | default(omit) }}"
+        device_write_bps: "{{ docker_container.device_write_bps | default(omit) }}"
+        device_write_iops: "{{ docker_container.device_write_iops | default(omit) }}"
+        devices: "{{ docker_container.devices | default(omit) }}"
+        dns_opts: "{{ docker_container.dns_opts | default(omit) }}"
+        dns_search_domains: "{{ docker_container.dns_search_domains | default(omit) }}"
+        dns_servers: "{{ docker_container.dns_servers | default(omit) }}"
+        docker_host: "{{ docker_container.docker_host | default(omit) }}"
+        domainname: "{{ docker_container.domainname | default(omit) }}"
+        entrypoint: "{{ docker_container.entrypoint | default(omit) }}"
+        env: "{{ docker_container.env | default(omit) }}"
+        env_file: "{{ docker_container.env_file | default(omit) }}"
+        etc_hosts: "{{ docker_container.etc_hosts | default(omit) }}"
+        exposed_ports: "{{ docker_container.exposed_ports | default(omit) }}"
+        force_kill: "{{ docker_container.force_kill | default(false) }}"
+        groups: "{{ docker_container.groups | default(omit) }}"
+        healthcheck: "{{ docker_container.healthcheck | default(omit) }}"
+        hostname: "{{ docker_container.hostname | default(omit) }}"
+        ignore_image: "{{ docker_container.ignore_image | default(false) }}"
+        image: "{{ docker_container.image }}"
+        init: "{{ docker_container.init | default(false) }}"
+        interactive: "{{ docker_container.interactive | default(false) }}"
+        ipc_mode: "{{ docker_container.ipc_mode | default(omit) }}"
+        keep_volumes: "{{ docker_container.keep_volumes | default(true) }}"
+        kernel_memory: "{{ docker_container.kernel_memory | default(omit) }}"
+        kill_signal: "{{ docker_container.kill_signal | default(omit) }}"
+        labels: "{{ docker_container.labels | default(omit) }}"
+        links: "{{ docker_container.links | default(omit) }}"
+        log_driver: "{{ docker_container.log_driver | default(omit) }}"
+        log_options: "{{ docker_container.log_options | default(omit) }}"
+        mac_address: "{{ docker_container.mac_address | default(omit) }}"
+        memory: "{{ docker_container.memory | default(0) }}"
+        memory_reservation: "{{ docker_container.memory_reservation | default(omit) }}"
+        memory_swap: "{{ docker_container.memory_swap | default(omit) }}"
+        memory_swappiness: "{{ docker_container.memory_swappiness | default(omit) }}"
+        mounts: "{{ docker_container.mounts | default(omit) }}"
+        name: "{{ docker_container.name }}"
+        network_mode: "{{ docker_container.network_mode | default(omit) }}"
+        networks: "{{ docker_container.networks | default(omit) }}"
+        networks_cli_compatible: "{{ docker_container.networks_cli_compatible | default(omit) }}"
+        oom_killer: "{{ docker_container.oom_killer | default(omit) }}"
+        oom_score_adj: "{{ docker_container.oom_score_adj | default(omit) }}"
+        output_logs: "{{ docker_container.output_logs | default(false) }}"
+        paused: "{{ docker_container.paused | default(false) }}"
+        pid_mode: "{{ docker_container.pid_mode | default(omit) }}"
+        pids_limit: "{{ docker_container.pids_limit | default(omit) }}"
+        privileged: "{{ docker_container.privileged | default(false) }}"
+        published_ports: "{{ docker_container.published_ports | default(omit) }}"
+        pull: "{{ docker_container.pull | default(false) }}"
+        purge_networks: "{{ docker_container.purge_networks | default(false) }}"
+        read_only: "{{ docker_container.read_only | default(false) }}"
+        recreate: "{{ docker_container.recreate | default(false) }}"
+        restart: "{{ docker_container.restart | default(false) }}"
+        restart_policy: "{{ docker_container.restart_policy | default(omit) }}"
+        restart_retries: "{{ docker_container.restart_retries | default(omit) }}"
+        runtime: "{{ docker_container.runtime | default(omit) }}"
+        security_opts: "{{ docker_container.security_opts | default(omit) }}"
+        shm_size: "{{ docker_container.shm_size | default(omit) }}"
+        ssl_version: "{{ docker_container.ssl_version | default(omit) }}"
+        state: "{{ docker_container.state | default('started') }}"
+        stop_signal: "{{ docker_container.stop_signal | default(omit) }}"
+        stop_timeout: "{{ docker_container.stop_timeout | default(omit) }}"
+        sysctls: "{{ docker_container.sysctls | default(omit) }}"
+        timeout: "{{ docker_container.timeout | default(60) }}"
+        tls: "{{ docker_container.tls | default(false) }}"
+        tls_hostname: "{{ docker_container.tls_hostname | default(omit) }}"
+        tmpfs: "{{ docker_container.tmpfs | default(omit) }}"
+        tty: "{{ docker_container.tty | default(false) }}"
+        ulimits: "{{ docker_container.ulimits | default(omit) }}"
+        user: "{{ docker_container.user | default(omit) }}"
+        userns_mode: "{{ docker_container.userns_mode | default(omit) }}"
+        uts: "{{ docker_container.uts | default(omit) }}"
+        validate_certs: "{{ docker_container.validate_certs | default(false) }}"
+        volume_driver: "{{ docker_container.volume_driver | default(omit) }}"
+        volumes: "{{ docker_container.volumes | default(omit) }}"
+        volumes_from: "{{ docker_container.volumes_from | default(omit) }}"
+        working_dir: "{{ docker_container.working_dir | default(omit) }}"
+      loop: "{{ docker_containers }}"
+      loop_control:
+        label: "{{ docker_container.name }}"
+        loop_var: docker_container
+      vars:
+        ansible_python_interpreter: "{{ _docker_tempfile.path + '/bin/python' }}"
+      when:
+        - docker_container.name is defined
+        - docker_container.image is defined
+        - docker_containers | length > 0
+
+    - name: Ensure temporary directory is absent
+      file:
+        path: "{{ _docker_tempfile.path }}"
+        state: absent
+
+  when: docker_containers | length > 0 or
+        docker_networks | length > 0
 ...

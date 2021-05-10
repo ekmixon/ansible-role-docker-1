@@ -14,6 +14,10 @@ None
 
 Available variables are listed below, along with default values:
 
+    docker_compose: []
+    docker_compose_bin: /usr/bin/docker-compose
+    docker_compose_dir: /etc/docker/compose
+    docker_containers: []
     docker_kmods:
       - iptable_filter
       - iptable_nat
@@ -29,6 +33,7 @@ Available variables are listed below, along with default values:
     docker_packages:
       - containerd.io
       - docker-ce
+      - docker-compose
     docker_repository_stable: true
     docker_repository_stable_debuginfo: false
     docker_repository_stable_source: false
@@ -52,6 +57,9 @@ None
     - hosts: servers
       roles:
         - role: linuxhq.docker
+          docker_containers:
+            - name: linuxhq
+              image: httpd:2.4
           docker_networks:
             - name: linuxhq
               driver: bridge
