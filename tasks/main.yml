@@ -63,6 +63,41 @@
     path: "{{ docker_compose_dir }}"
     state: directory
 
+- name: Ensure docker-compose project directories are present
+  tags: docker
+  become: true
+  file:
+    group: docker
+    mode: 0750
+    owner: root
+    path: "{{ [docker_compose_dir, project.name] | join('/') }}"
+    state: directory
+  loop: "{{ docker_compose }}"
+  loop_control:
+    label: "{{ project.name }}"
+    loop_var: project
+  when:
+    - docker_compose | length > 0
+    - project.name is defined
+
+- name: Ensure docker-compose definitions are present
+  tags: docker
+  become: true
+  template:
+    dest: "{{ [docker_compose_dir, project.name, 'docker-compose.yml'] | join('/') }}"
+    group: docker
+    mode: 0640
+    owner: root
+    src: docker-compose.yml.j2
+  loop: "{{ docker_compose }}"
+  loop_control:
+    label: "{{ project.name }}"
+    loop_var: project
+  when:
+    - docker_compose | length > 0
+    - project.definition is defined
+    - project.name is defined
+
 - name: Overlay docker-compose systemd unit
   tags: docker
   become: true
@@ -81,7 +116,7 @@
     daemon_reload: true
   when: _docker_compose_systemd is changed
 
-- name: Ensure docker is started and enabled on boot
+- name: Ensure docker services are started and enabled on boot
   tags: docker
   become: true
   systemd:

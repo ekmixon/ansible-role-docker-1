@@ -1,0 +1,5 @@
+---
+{% if project.definition | length > 0 -%}
+{{ project.definition | to_nice_yaml(indent=2) }}
+{%- endif %}
+...

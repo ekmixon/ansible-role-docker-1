@@ -57,6 +57,29 @@ None
     - hosts: servers
       roles:
         - role: linuxhq.docker
+          docker_compose:
+            - name: watchtower
+              definition:
+                version: '3'
+                networks:
+                  isolated_30:
+                    driver: bridge
+                    ipam:
+                      config:
+                        - subnet: 192.168.0.0/30
+                services:
+                  watchtower:
+                    container_name: watchtower
+                    environment:
+                      WATCHTOWER_CLEANUP: 'true'
+                      WATCHTOWER_POLL_INTERVAL: 3600
+                      TZ: America/Los_Angeles
+                      UMASK: 002
+                    image: containrrr/watchtower:latest
+                    networks:
+                      - isolated_30
+                    volumes:
+                      - /var/run/docker.sock:/var/run/docker.sock
           docker_containers:
             - name: linuxhq
               image: httpd:2.4
@@ -65,6 +88,10 @@ None
               driver: bridge
               enable_ipv6: false
               scope: local
+          docker_systemd:
+            - containerd.service
+            - docker.service
+            - docker-compose@watchtower.service
           docker_users:
             - linuxhq
 
