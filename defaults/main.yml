@@ -9,6 +9,7 @@ docker_kmods:
   - nf_conntrack_netlink
   - nf_nat
   - overlay
+  - tun
   - veth
   - xt_addrtype
   - xt_conntrack

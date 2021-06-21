@@ -24,6 +24,7 @@ Available variables are listed below, along with default values:
       - nf_conntrack_netlink
       - nf_nat
       - overlay
+      - tun
       - veth
       - xt_addrtype
       - xt_conntrack
