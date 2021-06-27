@@ -14,10 +14,10 @@ None
 
 Available variables are listed below, along with default values:
 
+    docker_compose_app: []
     docker_compose_bin: /usr/bin/docker-compose
     docker_compose_dir: /etc/docker/compose
     docker_compose_env: []
-    docker_compose_app: []
     docker_containers: []
     docker_kmods:
       - iptable_filter
