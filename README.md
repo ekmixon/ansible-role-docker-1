@@ -14,9 +14,10 @@ None
 
 Available variables are listed below, along with default values:
 
-    docker_compose: []
     docker_compose_bin: /usr/bin/docker-compose
     docker_compose_dir: /etc/docker/compose
+    docker_compose_env: []
+    docker_compose_app: []
     docker_containers: []
     docker_kmods:
       - iptable_filter
@@ -58,7 +59,14 @@ None
     - hosts: servers
       roles:
         - role: linuxhq.docker
-          docker_compose:
+          docker_compose_env:
+            - name: watchtower
+              env:
+                LINUXHQ_TZ: America/Los_Angeles
+                LINUXHQ_UMASK: 2
+                LINUXHQ_WATCHTOWER_CLEANUP: 'true'
+                LINUXHQ_WATCHTOWER_POLL_INTERVAL: 3600
+          docker_compose_app:
             - name: watchtower
               definition:
                 version: '3'
@@ -72,10 +80,10 @@ None
                   watchtower:
                     container_name: watchtower
                     environment:
-                      WATCHTOWER_CLEANUP: 'true'
-                      WATCHTOWER_POLL_INTERVAL: 3600
-                      TZ: America/Los_Angeles
-                      UMASK: 002
+                      WATCHTOWER_CLEANUP: ${LINUXHQ_WATCHTOWER_CLEANUP}
+                      WATCHTOWER_POLL_INTERVAL: ${LINUXHQ_WATCHTOWER_POLL_INTERVAL}
+                      TZ: ${LINUXHQ_TZ}
+                      UMASK: ${LINUXHQ_UMASK}
                     image: containrrr/watchtower:latest
                     networks:
                       - isolated_30
